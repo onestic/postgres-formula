@@ -5,14 +5,14 @@ include:
   - postgres.upstream
 {% endif %}
 
-{{ postgres.conf_dir }}:
-  file.directory:
-    - makedirs: True
-
 install-postgresql:
   pkg.installed:
     - name: {{ postgres.pkg }}
     - refresh: {{ postgres.use_upstream_repo }}
+
+{{ postgres.conf_dir }}:
+  file.directory:
+    - makedirs: True
 
 {% if postgres.create_cluster != False %}
 create-postgresql-cluster:
