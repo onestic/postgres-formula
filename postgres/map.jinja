@@ -1,22 +1,32 @@
 {% import_yaml "postgres/defaults.yaml" as defaults %}
+{% import_yaml "postgres/osfamilymap.yaml" as osfamilymap %}
 {% import_yaml "postgres/osmap.yaml" as osmap %}
-{% import_yaml "postgres/codenamemap.yaml" as codemap %}
+{% import_yaml "postgres/codenamemap.yaml" as oscodenamemap %}
 
-{# get the settings for the os_family grain #}
-{% set osfam = salt['grains.filter_by'](osmap) or {} %}
-{# get the settings for the oscodename grain, os_family data will override
-    oscodename data #}
-{% set oscode = salt['grains.filter_by'](codemap,
-                                         grain='oscodename',
-                                         merge=osfam) or {} %}
+{% set postgres = salt['grains.filter_by'](
+    defaults,
+    merge=salt['grains.filter_by'](
+        osfamilymap,
+        grain='os_family',
+        merge=salt['grains.filter_by'](
+            osmap,
+            grain='os',
+            merge=salt['grains.filter_by'](
+                oscodenamemap,
+                grain='oscodename',
+                merge=salt['pillar.get']('postgres', {}),
+            ),
+        ),
+    ),
+    base='postgres',
+) %}
 
-{# merge the os family/codename specific data over the defaults #}
-{% do defaults.postgres.update(oscode) %}
-
-{# merge the pillar:lookup dict into the defaults/os specific dict #}
-{% set lookup = salt['pillar.get']('postgres:lookup',
-                                   default=defaults.postgres,
-                                   merge=True) %}
-
-{# merge the actual postgres pillar into the above combined dict #}
-{% set postgres = salt['pillar.get']('postgres', default=lookup, merge=True) %}
+{# Concatenate the cluster preparation command and then append it to the `postgres` dict #}
+{% set pc_cmd = '{0} {1}'.format(postgres.prepare_cluster.pgcommand, postgres.data_dir) %}
+{% if postgres.cluster.locale %}
+  {% set pc_cmd = '{0} --locale={1}'.format(pc_cmd, postgres.cluster.locale) %}
+{% endif %}
+{% if postgres.cluster.encoding %}
+  {% set pc_cmd = '{0} --encoding={1}'.format(pc_cmd, postgres.cluster.encoding) %}
+{% endif %}
+{% do postgres.update({'prepare_cluster_cmd': pc_cmd}) %}
